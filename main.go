@@ -11,17 +11,41 @@ import (
 	"mvdan.cc/xurls/v2"
 )
 
+const workersCount = 10
+
+type outputTextArea struct {
+	mu sync.Mutex
+	w  *widgets.QTextEdit
+}
+
+var output outputTextArea
+
+func checkLink(links chan string) {
+	for link := range links {
+		resp, err := http.Get(link)
+		if err == nil && resp.StatusCode == 200 {
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil || strings.Index(string(body), "://inmak.com") == -1 {
+				continue
+			}
+			output.mu.Lock()
+			output.w.SetText(output.w.ToPlainText() + link + "\n")
+			output.w.VerticalScrollBar().SetValue(output.w.VerticalScrollBar().Maximum())
+			output.mu.Unlock()
+		}
+	}
+}
 func main() {
 
 	// needs to be called once before you can start using the QWidgets
 	app := widgets.NewQApplication(len(os.Args), os.Args)
 
 	// create a window
-	// with a minimum size of 250*200
-	// and sets the title to "Hello Widgets Example"
+	// with a minimum size of 600*400
+	// and sets the title
 	window := widgets.NewQMainWindow(nil, 0)
 	window.SetMinimumSize2(600, 400)
-	window.SetWindowTitle("Проверка ссылок vizitka-inmak")
+	window.SetWindowTitle("Проверка ссылок на vizitka-inmak")
 
 	// create a regular widget
 	// give it a QVBoxLayout
@@ -30,21 +54,19 @@ func main() {
 	widget.SetLayout(widgets.NewQVBoxLayout())
 	window.SetCentralWidget(widget)
 
-	// create a line edit
+	// create a text edit
 	// with a custom placeholder text
 	// and add it to the central widgets layout
-	// input := widgets.NewQLineEdit(nil)
 	input := widgets.NewQTextEdit(nil)
 	input.SetPlaceholderText("Вставьте список ссылок ...")
 
-	output := widgets.NewQTextEdit(nil)
-	output.SetPlaceholderText("Здесь появятся рабочие ссылки ...")
-	output.SetReadOnly(true)
+	output.w = widgets.NewQTextEdit(nil)
+	output.w.SetPlaceholderText("Здесь появятся рабочие ссылки ...")
+	output.w.SetReadOnly(true)
 
 	widget.Layout().AddWidget(input)
-	widget.Layout().AddWidget(output)
+	widget.Layout().AddWidget(output.w)
 
-	links := make(chan string)
 	// create a button
 	// connect the clicked signal
 	// and add it to the central widgets layout
@@ -52,13 +74,24 @@ func main() {
 	button.ConnectClicked(func(bool) {
 		text := input.ToPlainText()
 		button.SetEnabled(false)
-		output.SetText("")
+		output.w.SetText("")
 
 		rxStrict := xurls.Strict()
 		go func() {
+			links := make(chan string)
+			var wg sync.WaitGroup
+			wg.Add(workersCount)
+			for i := 1; i <= workersCount; i++ {
+				go func() {
+					defer wg.Done()
+					checkLink(links)
+				}()
+			}
 			for _, l := range rxStrict.FindAllString(text, -1) {
 				links <- l
 			}
+			close(links)
+			wg.Wait()
 			button.SetEnabled(true)
 		}()
 	})
@@ -66,30 +99,6 @@ func main() {
 
 	// make the window visible
 	window.ShowMaximized()
-
-	var outputMu sync.Mutex
-	checkLink := func() {
-		for link := range links {
-			resp, err := http.Get(link)
-			if err == nil && resp.StatusCode == 200 {
-				body, err := ioutil.ReadAll(resp.Body)
-				if err != nil || strings.Index(string(body), "://inmak.com") == -1 {
-					continue
-				}
-				outputMu.Lock()
-				output.SetText(output.ToPlainText() + link + "\n")
-				output.VerticalScrollBar().SetValue(output.VerticalScrollBar().Maximum())
-				outputMu.Unlock()
-			}
-		}
-	}
-	go checkLink()
-	go checkLink()
-	go checkLink()
-	go checkLink()
-	go checkLink()
-	go checkLink()
-	go checkLink()
 
 	// start the main Qt event loop
 	// and block until app.Exit() is called
