@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 
@@ -29,7 +30,7 @@ func checkLink(links chan string) {
 				continue
 			}
 			output.mu.Lock()
-			output.w.SetText(output.w.ToPlainText() + link + "\n")
+			output.w.SetPlainText(output.w.ToPlainText() + link + "\n")
 			output.w.VerticalScrollBar().SetValue(output.w.VerticalScrollBar().Maximum())
 			output.mu.Unlock()
 		}
@@ -70,11 +71,11 @@ func main() {
 	// create a button
 	// connect the clicked signal
 	// and add it to the central widgets layout
-	button := widgets.NewQPushButton2("Проверить!", nil)
+	button := widgets.NewQPushButton2("Проверить ссылки", nil)
 	button.ConnectClicked(func(bool) {
 		text := input.ToPlainText()
 		button.SetEnabled(false)
-		output.w.SetText("")
+		output.w.SetPlainText("")
 
 		rxStrict := xurls.Strict()
 		go func() {
@@ -92,6 +93,10 @@ func main() {
 			}
 			close(links)
 			wg.Wait()
+			lines := strings.Split(output.w.ToPlainText(), "\n")
+			sort.Strings(lines)
+			output.w.SetPlainText(strings.Join(lines, "\n"))
+			output.w.VerticalScrollBar().SetValue(output.w.VerticalScrollBar().Maximum())
 			button.SetEnabled(true)
 		}()
 	})
