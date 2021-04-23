@@ -44,7 +44,7 @@ func main() {
 	widget.Layout().AddWidget(input)
 	widget.Layout().AddWidget(output)
 
-	links := make(chan string, 10000)
+	links := make(chan string)
 	// create a button
 	// connect the clicked signal
 	// and add it to the central widgets layout
@@ -55,10 +55,12 @@ func main() {
 		output.SetText("")
 
 		rxStrict := xurls.Strict()
-		for _, l := range rxStrict.FindAllString(text, -1) {
-			links <- l
-		}
-		links <- "__LAST"
+		go func() {
+			for _, l := range rxStrict.FindAllString(text, -1) {
+				links <- l
+			}
+			button.SetEnabled(true)
+		}()
 	})
 	widget.Layout().AddWidget(button)
 
@@ -68,10 +70,6 @@ func main() {
 	var outputMu sync.Mutex
 	checkLink := func() {
 		for link := range links {
-			if link == "__LAST" {
-				button.SetEnabled(true)
-				continue
-			}
 			resp, err := http.Get(link)
 			if err == nil && resp.StatusCode == 200 {
 				body, err := ioutil.ReadAll(resp.Body)
