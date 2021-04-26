@@ -93,9 +93,10 @@ func main() {
 			}
 			close(links)
 			wg.Wait()
-			lines := strings.Split(output.w.ToPlainText(), "\n")
+			lines := strings.Split(strings.TrimSpace(output.w.ToPlainText()), "\n")
+			print(lines)
 			sort.Strings(lines)
-			output.w.SetPlainText(strings.Join(lines, "\n"))
+			output.w.SetPlainText(strings.Join(lines, "\n") + "\n")
 			output.w.VerticalScrollBar().SetValue(output.w.VerticalScrollBar().Maximum())
 			button.SetEnabled(true)
 		}()
