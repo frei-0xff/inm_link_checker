@@ -1,7 +1,7 @@
 GOMOD=link_checker
 build: release
 upx:
-	upx -9 $(GOMOD)*
+	upx $(GOMOD)*
 debug: compdbg
 release: comprel upx
 windows: export GOOS=windows
