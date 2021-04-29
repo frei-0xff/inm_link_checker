@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/therecipe/qt/widgets"
+	"golang.org/x/net/html/charset"
 	"mvdan.cc/xurls/v2"
 )
 
@@ -21,12 +22,18 @@ type outputTextArea struct {
 
 var output outputTextArea
 
-func checkLink(links chan string) {
+func checkLink(links chan string, onlyWithOffers bool) {
 	for link := range links {
 		resp, err := http.Get(link)
 		if err == nil && resp.StatusCode == 200 {
-			body, err := ioutil.ReadAll(resp.Body)
-			if err != nil || strings.Index(string(body), "://inmak.com") == -1 {
+			reader, err := charset.NewReader(resp.Body, resp.Header.Get("Content-Type"))
+			if err != nil {
+				continue
+			}
+			body, err := ioutil.ReadAll(reader)
+			if err != nil ||
+				strings.Index(string(body), "://inmak.com") == -1 ||
+				(onlyWithOffers && strings.Index(string(body), "<title>ИнМАК") == -1) {
 				continue
 			}
 			output.mu.Lock()
@@ -68,12 +75,16 @@ func main() {
 	widget.Layout().AddWidget(input)
 	widget.Layout().AddWidget(output.w)
 
+	checkbox := widgets.NewQCheckBox2("Только визитки с коммерческими предложениями", nil)
+	widget.Layout().AddWidget(checkbox)
+
 	// create a button
 	// connect the clicked signal
 	// and add it to the central widgets layout
 	button := widgets.NewQPushButton2("Проверить ссылки", nil)
 	button.ConnectClicked(func(bool) {
 		text := input.ToPlainText()
+		onlyWithOffers := checkbox.IsChecked()
 		button.SetEnabled(false)
 		output.w.SetPlainText("")
 
@@ -85,7 +96,7 @@ func main() {
 			for i := 1; i <= workersCount; i++ {
 				go func() {
 					defer wg.Done()
-					checkLink(links)
+					checkLink(links, onlyWithOffers)
 				}()
 			}
 			for _, l := range rxStrict.FindAllString(text, -1) {
